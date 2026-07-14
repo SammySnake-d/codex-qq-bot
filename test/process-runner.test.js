@@ -7,6 +7,16 @@ test("runs a process and parses bounded JSON output", async () => {
   assert.deepEqual(result, [{ ok: true }]);
 });
 
+test("writes bounded input to child stdin", async () => {
+  const result = await runProcess(process.execPath, ["-e", [
+    "let body = '';",
+    "process.stdin.setEncoding('utf8');",
+    "process.stdin.on('data', (chunk) => { body += chunk; });",
+    "process.stdin.on('end', () => process.stdout.write(body.toUpperCase()));"
+  ].join("\n")], { input: "group summary" });
+  assert.equal(result.stdout, "GROUP SUMMARY");
+});
+
 test("terminates a process that exceeds its output budget", async () => {
   await assert.rejects(
     runProcess(process.execPath, ["-e", "process.stdout.write('x'.repeat(10000)); setInterval(() => {}, 1000)"], {

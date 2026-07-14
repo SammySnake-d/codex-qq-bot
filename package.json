@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
+    "summary": "node src/group-summary/cli.js run",
+    "summary:force": "node src/group-summary/cli.js run --force",
     "deploy": "zsh scripts/deploy.command",
     "ncc": "zsh scripts/ncc.command",
     "check": "node scripts/check.mjs",
@@ -14,5 +16,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1"
   }
 }

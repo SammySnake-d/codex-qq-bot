@@ -533,6 +533,53 @@ Hub 默认只监听回环地址。非回环监听必须同时设置 `CODEX_REMOT
 
 OneBot webhook 在设置了 `ONEBOT_ACCESS_TOKEN` 时使用该令牌鉴权；否则会回退使用 `CODEX_REMOTE_CONTACT_API_TOKEN`，因此启用远程管理不会意外留下未鉴权的回调入口。只有两个令牌都为空时，回调才允许无鉴权进入；此类回调会被视为不可信来源，不能获得主人权限。
 
+## 不定时群聊总结 Agent
+
+`src/group-summary/` 提供独立的 cron worker。它通过 NapCat 的
+`get_group_msg_history` 增量同步群消息到 SQLite，按消息数、参与人数、
+安静期和持久化随机时间判断是否需要总结，再调用全新的 Codex CLI 或
+Claude Code 进程生成结构化结果。只有 OneBot 明确发送成功后才推进总结游标。
+
+将 `config/group-summary.env.example` 中需要的配置合并到
+`config/local.env`。群号必须显式配置，发送默认关闭：
+
+```bash
+QQ_SUMMARY_GROUP_IDS=123456789
+QQ_SUMMARY_PROVIDER=codex
+QQ_SUMMARY_SEND_ENABLED=0
+```
+
+先强制生成一次但不发群：
+
+```bash
+npm run summary -- --force --dry-run
+```
+
+确认输出后执行真实发送：
+
+```bash
+npm run summary -- --force --send
+```
+
+cron 本身保持固定心跳，真正的随机时间保存在 SQLite 的 `next_due_at`：
+
+```cron
+*/5 * * * * /Users/you/codex-qq-bot/scripts/group-summary-cron.command >> /Users/you/codex-qq-bot/runtime/logs/group-summary-cron.log 2>&1
+```
+
+Claude Code 默认使用 `--safe-mode`，这样既关闭自定义工具、MCP、hook、
+skill 和项目指令，又可以继续使用本机 OAuth/keychain 登录。只有使用 API key
+认证时才建议设置 `QQ_SUMMARY_CLAUDE_BARE=1`。
+
+Codex 默认从当前 `CODEX_HOME` 提取正在使用的模型 Provider 和认证文件，生成
+只包含该 Provider 的隔离运行目录。群聊总结不会加载主环境里的 MCP、hook、
+skill、记忆或通知配置；模型进程还会禁用插件、内置 skill 指令、shell、浏览器、
+computer-use 和多 Agent 工具，也不会把认证文件写入 Git。如果 cron 继承不到
+交互式 shell 的 PATH，请为 `NODE_BIN`、`CODEX_CLI_PATH` 和
+`CLAUDE_CLI_PATH` 配置绝对路径。
+
+完整架构、状态机和验收边界见 `docs/group-summary-agent.md`。
+
 ## 开发验证
 
 ```bash

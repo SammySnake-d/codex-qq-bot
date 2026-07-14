@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "overview": { "type": "string" },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "participants": { "type": "array", "items": { "type": "string" } },
+          "evidence_message_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+        },
+        "required": ["title", "summary", "participants", "evidence_message_ids"],
+        "additionalProperties": false
+      }
+    },
+    "decisions": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "type": "string" } },
+    "action_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item": { "type": "string" },
+          "owner": { "type": ["string", "null"] }
+        },
+        "required": ["item", "owner"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["overview", "topics", "decisions", "open_questions", "action_items"],
+  "additionalProperties": false
+}

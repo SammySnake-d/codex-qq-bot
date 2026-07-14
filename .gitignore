@@ -40,7 +40,9 @@ data/qq-requests.json
 data/qq-sticker-inventory.json
 data/qq-sticker-labels.json
 data/qq-stickers/
+data/group-summary.sqlite*
 data/keep-awake.pid
 data/previous-brightness.txt
 modules/system-control/bin/
 config/local.codexremotecontact.chat-hub.plist
+workspaces/group-summary/

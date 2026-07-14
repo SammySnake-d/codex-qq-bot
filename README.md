@@ -533,6 +533,57 @@ The Hub binds to loopback by default. A non-loopback bind requires both `CODEX_R
 
 OneBot webhook authentication uses `ONEBOT_ACCESS_TOKEN` when it is set. Otherwise, it falls back to `CODEX_REMOTE_CONTACT_API_TOKEN`, so enabling remote management does not accidentally leave the callback endpoint unauthenticated. Only when both tokens are empty are callbacks accepted without authentication; those callbacks are treated as untrusted and cannot receive owner privileges.
 
+## Irregular Group Summary Agent
+
+`src/group-summary/` provides an independent cron worker. It incrementally
+loads group history from NapCat `get_group_msg_history` into SQLite, evaluates
+message volume, speaker count, quiet time, and a persisted random due time, and
+then invokes a fresh Codex CLI or Claude Code process for structured output. The
+summary cursor advances only after OneBot confirms delivery.
+
+Merge the required values from `config/group-summary.env.example` into
+`config/local.env`. Group ids are explicit and sending is disabled by default:
+
+```bash
+QQ_SUMMARY_GROUP_IDS=123456789
+QQ_SUMMARY_PROVIDER=codex
+QQ_SUMMARY_SEND_ENABLED=0
+```
+
+Generate one summary without sending it:
+
+```bash
+npm run summary -- --force --dry-run
+```
+
+After inspecting the result, perform a real send:
+
+```bash
+npm run summary -- --force --send
+```
+
+Keep cron as a fixed heartbeat. The actual randomized schedule is persisted as
+`next_due_at` in SQLite:
+
+```cron
+*/5 * * * * /Users/you/codex-qq-bot/scripts/group-summary-cron.command >> /Users/you/codex-qq-bot/runtime/logs/group-summary-cron.log 2>&1
+```
+
+Claude Code uses `--safe-mode` by default. This disables custom tools, MCP,
+hooks, skills, and project instructions while retaining local OAuth/keychain
+authentication. Set `QQ_SUMMARY_CLAUDE_BARE=1` only with API-key authentication.
+
+By default, the Codex provider derives an isolated runtime from the selected
+provider and authentication files in the active `CODEX_HOME`. Summary runs do
+not load the primary environment's MCP servers, hooks, skills, memories, or
+notification commands. Plugins, bundled skill instructions, shell execution,
+browser/computer use, and multi-agent tools are disabled for the model process,
+and credentials are never written to Git. Use absolute `NODE_BIN`,
+`CODEX_CLI_PATH`, and `CLAUDE_CLI_PATH` values when cron does not inherit your
+interactive shell PATH.
+
+See `docs/group-summary-agent.md` for the state machine and acceptance boundary.
+
 ## Development Verification
 
 ```bash

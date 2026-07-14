@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -42,11 +42,11 @@ test("only permits QQ markers from the current task output and approved image ro
     qqStickerDir: stickerDir
   };
 
-  assert.equal(await resolveAllowedQqMarkerPath(generatedImage, { ...options, kind: "image" }), generatedImage);
-  assert.equal(await resolveAllowedQqMarkerPath(generatedFile, { ...options, kind: "file" }), generatedFile);
-  assert.equal(await resolveAllowedQqMarkerPath(pathToFileURL(generatedImage).href, { ...options, kind: "image" }), generatedImage);
-  assert.equal(await resolveAllowedQqMarkerPath(legacyImage, { ...options, kind: "image" }), legacyImage);
-  assert.equal(await resolveAllowedQqMarkerPath(sticker, { ...options, kind: "image" }), sticker);
+  assert.equal(await resolveAllowedQqMarkerPath(generatedImage, { ...options, kind: "image" }), await realpath(generatedImage));
+  assert.equal(await resolveAllowedQqMarkerPath(generatedFile, { ...options, kind: "file" }), await realpath(generatedFile));
+  assert.equal(await resolveAllowedQqMarkerPath(pathToFileURL(generatedImage).href, { ...options, kind: "image" }), await realpath(generatedImage));
+  assert.equal(await resolveAllowedQqMarkerPath(legacyImage, { ...options, kind: "image" }), await realpath(legacyImage));
+  assert.equal(await resolveAllowedQqMarkerPath(sticker, { ...options, kind: "image" }), await realpath(sticker));
 
   assert.equal(await resolveAllowedQqMarkerPath(legacyImage, { ...options, kind: "file" }), "");
   assert.equal(await resolveAllowedQqMarkerPath(privateFile, { ...options, kind: "file" }), "");

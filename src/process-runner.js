@@ -8,6 +8,7 @@ export function runProcess(command, args = [], {
   maxOutputBytes = defaultMaxOutputBytes,
   killGraceMs = 1_000,
   allowFailure = false,
+  input,
   signal: optionsSignal,
   cwd,
   env,
@@ -26,7 +27,7 @@ export function runProcess(command, args = [], {
       child = spawnProcess(command, args, {
         cwd,
         env,
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: [input == null ? "ignore" : "pipe", "pipe", "pipe"]
       });
     } catch (error) {
       reject(error);
@@ -111,6 +112,12 @@ export function runProcess(command, args = [], {
 
     child.once("error", (error) => finish(error));
     child.once("close", (code, exitSignal) => finish(null, code, exitSignal));
+    if (input != null) {
+      child.stdin?.once("error", (error) => {
+        if (error?.code !== "EPIPE") terminate(error);
+      });
+      child.stdin?.end(input);
+    }
   });
 }
 

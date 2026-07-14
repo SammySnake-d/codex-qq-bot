@@ -44,7 +44,7 @@ test("finds a Codex model by picker number, id, or model slug", () => {
 
 test("rejects cleanly when the Codex app-server exits before reading stdin", async () => {
   await assert.rejects(
-    readCodexModels({ codexPath: "/bin/false", timeoutMs: 1_000 }),
+    readCodexModels({ codexPath: process.execPath, timeoutMs: 1_000 }),
     /EPIPE|exited with|stdin closed/
   );
 });
