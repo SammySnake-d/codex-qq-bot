@@ -6,7 +6,23 @@ import { join } from "node:path";
 import test from "node:test";
 import { OneBotClient } from "../src/group-summary/onebot-client.js";
 import { GroupSummaryStore } from "../src/group-summary/sqlite-store.js";
-import { runGroupSummaryPass } from "../src/group-summary/worker.js";
+import { chunkSummaryMessages, runGroupSummaryPass } from "../src/group-summary/worker.js";
+
+test("chunks large windows by message count and prompt size", () => {
+  const messages = Array.from({ length: 3_201 }, (_, index) => ({
+    messageId: String(index + 1),
+    sentAt: index + 1,
+    displayName: "A",
+    userId: "1",
+    content: "ok"
+  }));
+  const countChunks = chunkSummaryMessages(messages, { maxMessages: 1_500, maxChars: 1_000_000 });
+  assert.deepEqual(countChunks.map((chunk) => chunk.length), [1_500, 1_500, 201]);
+
+  const sizeChunks = chunkSummaryMessages(messages.slice(0, 3), { maxMessages: 1_500, maxChars: 150 });
+  assert.ok(sizeChunks.length > 1);
+  assert.equal(sizeChunks.flat().length, 3);
+});
 
 test("runs history -> SQLite -> provider -> OneBot once and suppresses a duplicate window", async () => {
   const nowMs = new Date(2026, 6, 14, 12, 0).getTime();
@@ -89,6 +105,64 @@ test("reads a group window but delivers the summary to a private friend", async 
     assert.equal(fixture.privateMessages.length, 1);
     assert.equal(fixture.privateMessages[0].userId, "2909951742");
     assert.match(fixture.privateMessages[0].message, /群聊小结/);
+  } finally {
+    store.close();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("rolls each fresh summary batch into the next batch and sends once", async () => {
+  const nowMs = new Date(2026, 6, 14, 12, 0).getTime();
+  const fixture = createOneBotFixture(nowMs);
+  const server = await listen(fixture.handler);
+  const directory = await mkdtemp(join(tmpdir(), "group-summary-rolling-"));
+  const store = new GroupSummaryStore(join(directory, "summary.sqlite"));
+  const calls = [];
+  const provider = {
+    async generate({ messages, previousSummary, batchIndex, batchCount }) {
+      calls.push({ messages, previousSummary, batchIndex, batchCount });
+      const priorEvidence = previousSummary?.topics.flatMap((topic) => topic.evidence_message_ids) || [];
+      return {
+        overview: `累计到第 ${batchIndex + 1} 批`,
+        topics: [{
+          title: "滚动摘要",
+          summary: "保留上一批结论并合并当前批。",
+          participants: [messages[0].displayName],
+          evidence_message_ids: [...priorEvidence, ...messages.map((message) => message.messageId)]
+        }],
+        decisions: [],
+        open_questions: [],
+        action_items: []
+      };
+    }
+  };
+  try {
+    const config = makeConfig(server.url, {
+      sendEnabled: true,
+      delivery: { mode: "private", userId: "2909951742" },
+      policy: { summaryChunkSize: 1, summaryChunkMaxChars: 100_000 }
+    });
+    const result = await runGroupSummaryPass({
+      groupId: "12345",
+      config,
+      store,
+      oneBot: new OneBotClient(config.oneBot),
+      provider,
+      force: true,
+      now: () => nowMs,
+      random: () => 0
+    });
+    assert.equal(result.status, "sent");
+    assert.equal(result.summaryBatchCount, 2);
+    assert.equal(result.summaryChunkSize, 1);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].previousSummary, null);
+    assert.equal(calls[1].previousSummary.overview, "累计到第 1 批");
+    assert.deepEqual(calls.map((call) => call.batchIndex), [0, 1]);
+    assert.ok(calls.every((call) => call.batchCount === 2));
+    assert.equal(fixture.privateMessages.length, 1);
+    assert.equal(fixture.sentMessages.length, 0);
   } finally {
     store.close();
     await server.close();
@@ -187,7 +261,11 @@ test("reconciles a private summary whose response was lost", async () => {
   }
 });
 
-function makeConfig(baseUrl, { sendEnabled, delivery = { mode: "group", userId: "" } }) {
+function makeConfig(baseUrl, {
+  sendEnabled,
+  delivery = { mode: "group", userId: "" },
+  policy = {}
+}) {
   return {
     selfId: "",
     sendEnabled,
@@ -211,8 +289,11 @@ function makeConfig(baseUrl, { sendEnabled, delivery = { mode: "group", userId: 
       activeChatMinMinutes: 15,
       activeChatMaxMinutes: 30,
       maxMessagesPerRun: 1_000,
+      summaryChunkSize: 1_500,
+      summaryChunkMaxChars: 240_000,
       maxRenderedChars: 900,
-      activeHours: { startMinute: 0, endMinute: 23 * 60 + 59 }
+      activeHours: { startMinute: 0, endMinute: 23 * 60 + 59 },
+      ...policy
     }
   };
 }

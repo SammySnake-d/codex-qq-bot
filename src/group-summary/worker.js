@@ -79,11 +79,30 @@ export async function runGroupSummaryPass({
   let summary = run.outputJson;
   let renderedText = run.renderedText;
   let outputHash = run.outputHash;
+  const summaryBatches = chunkSummaryMessages(messages, {
+    maxMessages: config.policy.summaryChunkSize,
+    maxChars: config.policy.summaryChunkMaxChars
+  });
   if (!summary || !renderedText || !outputHash) {
     store.markGenerating(run.runId, startedAt);
     try {
-      const rawOutput = await provider.generate({ groupId, messages });
-      summary = validateSummaryOutput(rawOutput, { allowedMessageIds: messages.map((message) => message.messageId) });
+      summary = null;
+      for (let batchIndex = 0; batchIndex < summaryBatches.length; batchIndex += 1) {
+        const batch = summaryBatches[batchIndex];
+        const rawOutput = await provider.generate({
+          groupId,
+          messages: batch,
+          previousSummary: summary,
+          batchIndex,
+          batchCount: summaryBatches.length
+        });
+        summary = validateSummaryOutput(rawOutput, {
+          allowedMessageIds: [
+            ...collectEvidenceMessageIds(summary),
+            ...batch.map((message) => message.messageId)
+          ]
+        });
+      }
       ({ renderedText, outputHash } = renderSummaryForQq(summary, {
         periodStart: messages[0].sentAt * 1_000,
         periodEnd: messages.at(-1).sentAt * 1_000,
@@ -106,6 +125,8 @@ export async function runGroupSummaryPass({
       status: "ready_not_sent",
       runId: run.runId,
       renderedText,
+      summaryBatchCount: summaryBatches.length,
+      summaryChunkSize: config.policy.summaryChunkSize,
       nextDueAt
     };
   }
@@ -125,6 +146,8 @@ export async function runGroupSummaryPass({
       sentMessageId: sent.messageId,
       deliveryMode: config.delivery?.mode || "group",
       deliveryTargetId: config.delivery?.mode === "private" ? config.delivery.userId : groupId,
+      summaryBatchCount: summaryBatches.length,
+      summaryChunkSize: config.policy.summaryChunkSize,
       messageCount: messages.length,
       nextDueAt,
       renderedText
@@ -134,6 +157,39 @@ export async function runGroupSummaryPass({
     store.markRunFailure(run.runId, status, error, now());
     return { groupId, status, runId: run.runId, error: error.message };
   }
+}
+
+export function chunkSummaryMessages(messages, { maxMessages = 1_500, maxChars = 240_000 } = {}) {
+  const chunks = [];
+  let current = [];
+  let currentChars = 0;
+  for (const message of Array.isArray(messages) ? messages : []) {
+    const messageChars = estimatePromptChars(message);
+    if (current.length && (current.length >= maxMessages || currentChars + messageChars > maxChars)) {
+      chunks.push(current);
+      current = [];
+      currentChars = 0;
+    }
+    current.push(message);
+    currentChars += messageChars;
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
+}
+
+function collectEvidenceMessageIds(summary) {
+  if (!summary?.topics) return [];
+  return summary.topics.flatMap((topic) => topic.evidence_message_ids || []);
+}
+
+function estimatePromptChars(message) {
+  return JSON.stringify({
+    message_id: message?.messageId || "",
+    time: message?.sentAt || 0,
+    sender: message?.displayName || "",
+    sender_id: message?.userId || "",
+    text: message?.content || ""
+  }).length;
 }
 
 async function findDeliveredSummary({ groupId, config, store, oneBot, unresolved, selfId }) {

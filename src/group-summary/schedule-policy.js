@@ -12,10 +12,11 @@ export function decideSummarySchedule({
   }
   if (force) return summarize("forced");
 
-  if (!Number(state?.nextDueAt)) {
+  const thresholdReached = pendingMessages.length >= policy.minMessages;
+  if (!thresholdReached && !Number(state?.nextDueAt)) {
     return defer("initial_schedule", nowMs, policy.dueMinMinutes, policy.dueMaxMinutes, random);
   }
-  if (nowMs < state.nextDueAt) {
+  if (!thresholdReached && nowMs < state.nextDueAt) {
     return { action: "not_due", reason: "before_next_due", nextDueAt: state.nextDueAt };
   }
 

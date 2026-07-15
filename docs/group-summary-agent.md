@@ -88,6 +88,13 @@ does not receive a general-purpose execution tool. Claude Code uses
 `--safe-mode`, an empty tool allow-list, no slash commands, and no session
 persistence.
 
+Large eligible windows use rolling batches. Each provider invocation is a fresh
+process with at most `QQ_SUMMARY_CHUNK_SIZE` messages and the configured prompt
+character budget. The first batch receives only raw messages. Later batches
+receive the previous validated cumulative summary plus the current raw-message
+batch. Intermediate summaries are not sent; only the final cumulative summary
+is rendered and delivered.
+
 ## Configuration Contract
 
 The worker is disabled unless `QQ_SUMMARY_GROUP_IDS` is non-empty. Source group

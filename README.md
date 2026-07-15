@@ -556,6 +556,14 @@ QQ_SUMMARY_SEND_ENABLED=0
 set `QQ_SUMMARY_DELIVERY_MODE=private` and `QQ_SUMMARY_DELIVERY_USER_ID` to send
 every summary to one QQ friend instead of posting it back to the source group.
 
+Set `QQ_SUMMARY_MIN_MESSAGES=1500` to wait for a substantial window. Larger
+windows use rolling summaries instead of one oversized prompt.
+`QQ_SUMMARY_CHUNK_SIZE=1500` caps each fresh provider invocation, while
+`QQ_SUMMARY_CHUNK_MAX_CHARS` adds a prompt-size safety bound. Batch one sees
+only its messages. Every later batch sees only the validated previous
+cumulative summary plus its own messages. Only the final cumulative summary is
+delivered.
+
 Generate one summary without sending it:
 
 ```bash

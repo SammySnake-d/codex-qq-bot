@@ -15,14 +15,18 @@ test("loads explicit group summary configuration without targeting groups by def
       QQ_SUMMARY_DELIVERY_USER_ID: "2909951742",
       QQ_SUMMARY_PROVIDER: "claude",
       QQ_SUMMARY_SEND_ENABLED: "1",
-      QQ_SUMMARY_MIN_MESSAGES: "20"
+      QQ_SUMMARY_MIN_MESSAGES: "1500",
+      QQ_SUMMARY_CHUNK_SIZE: "1500",
+      QQ_SUMMARY_CHUNK_MAX_CHARS: "240000"
     }
   });
   assert.deepEqual(enabled.groupIds, ["123456", "789012"]);
   assert.deepEqual(enabled.delivery, { mode: "private", userId: "2909951742" });
   assert.equal(enabled.provider.type, "claude");
   assert.equal(enabled.sendEnabled, true);
-  assert.equal(enabled.policy.minMessages, 20);
+  assert.equal(enabled.policy.minMessages, 1_500);
+  assert.equal(enabled.policy.summaryChunkSize, 1_500);
+  assert.equal(enabled.policy.summaryChunkMaxChars, 240_000);
 });
 
 test("rejects invalid identifiers and active hour ranges", () => {

@@ -54,7 +54,7 @@ export function loadGroupSummaryConfig({ env = process.env, projectDir = process
       maxBudgetUsd: parseOptionalNumber(env.QQ_SUMMARY_MAX_BUDGET_USD, { min: 0.01, max: 100 })
     },
     policy: {
-      minMessages: parseInteger(env.QQ_SUMMARY_MIN_MESSAGES, 50, { min: 1, max: 10_000 }),
+      minMessages: parseInteger(env.QQ_SUMMARY_MIN_MESSAGES, 1_500, { min: 1, max: 100_000 }),
       minSpeakers: parseInteger(env.QQ_SUMMARY_MIN_SPEAKERS, 3, { min: 1, max: 1_000 }),
       quietMinutes: parseInteger(env.QQ_SUMMARY_QUIET_MINUTES, 20, { min: 0, max: 1_440 }),
       minIntervalMinutes: parseInteger(env.QQ_SUMMARY_MIN_INTERVAL_MINUTES, 120, { min: 1, max: 10_080 }),
@@ -64,7 +64,9 @@ export function loadGroupSummaryConfig({ env = process.env, projectDir = process
       lowActivityMaxMinutes: parseInteger(env.QQ_SUMMARY_LOW_ACTIVITY_MAX_MINUTES, 90, { min: 1, max: 1_440 }),
       activeChatMinMinutes: parseInteger(env.QQ_SUMMARY_ACTIVE_CHAT_MIN_MINUTES, 15, { min: 1, max: 1_440 }),
       activeChatMaxMinutes: parseInteger(env.QQ_SUMMARY_ACTIVE_CHAT_MAX_MINUTES, 30, { min: 1, max: 1_440 }),
-      maxMessagesPerRun: parseInteger(env.QQ_SUMMARY_MAX_MESSAGES_PER_RUN, 1_000, { min: 1, max: 10_000 }),
+      maxMessagesPerRun: parseInteger(env.QQ_SUMMARY_MAX_MESSAGES_PER_RUN, 30_000, { min: 1, max: 100_000 }),
+      summaryChunkSize: parseInteger(env.QQ_SUMMARY_CHUNK_SIZE, 1_500, { min: 1, max: 10_000 }),
+      summaryChunkMaxChars: parseInteger(env.QQ_SUMMARY_CHUNK_MAX_CHARS, 240_000, { min: 10_000, max: 2_000_000 }),
       maxRenderedChars: parseInteger(env.QQ_SUMMARY_MAX_RENDERED_CHARS, 900, { min: 200, max: 4_000 }),
       activeHours: parseActiveHours(env.QQ_SUMMARY_ACTIVE_HOURS || DEFAULT_ACTIVE_HOURS)
     }

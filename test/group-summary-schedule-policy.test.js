@@ -39,7 +39,7 @@ test("summarizes an eligible quiet window and force bypasses thresholds", () => 
   ];
   const eligible = decideSummarySchedule({
     nowMs,
-    state: { nextDueAt: nowMs - 1, lastSentAt: nowMs - 3 * 60 * 60_000 },
+    state: { nextDueAt: nowMs + 6 * 60 * 60_000, lastSentAt: nowMs - 3 * 60 * 60_000 },
     messages,
     policy
   });
