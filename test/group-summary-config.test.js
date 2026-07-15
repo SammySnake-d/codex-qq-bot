@@ -11,12 +11,15 @@ test("loads explicit group summary configuration without targeting groups by def
     projectDir: "/tmp/project",
     env: {
       QQ_SUMMARY_GROUP_IDS: "123456, 789012 123456",
+      QQ_SUMMARY_DELIVERY_MODE: "private",
+      QQ_SUMMARY_DELIVERY_USER_ID: "2909951742",
       QQ_SUMMARY_PROVIDER: "claude",
       QQ_SUMMARY_SEND_ENABLED: "1",
       QQ_SUMMARY_MIN_MESSAGES: "20"
     }
   });
   assert.deepEqual(enabled.groupIds, ["123456", "789012"]);
+  assert.deepEqual(enabled.delivery, { mode: "private", userId: "2909951742" });
   assert.equal(enabled.provider.type, "claude");
   assert.equal(enabled.sendEnabled, true);
   assert.equal(enabled.policy.minMessages, 20);
@@ -30,4 +33,8 @@ test("rejects invalid identifiers and active hour ranges", () => {
     source: "08:30-23:00"
   });
   assert.throws(() => parseActiveHours("25:00-26:00"), /invalid time/);
+  assert.throws(() => loadGroupSummaryConfig({
+    env: { QQ_SUMMARY_DELIVERY_MODE: "private" },
+    projectDir: "/tmp/project"
+  }), /QQ_SUMMARY_DELIVERY_USER_ID is required/);
 });

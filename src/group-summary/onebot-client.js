@@ -24,7 +24,7 @@ export class OneBotClient {
       throw new OneBotError(
         timeout ? "ONEBOT_TIMEOUT" : "ONEBOT_NETWORK",
         `${action} ${timeout ? "timed out" : "network request failed"}: ${error.message}`,
-        { action, cause: error, deliveryUnknown: action === "send_group_msg" }
+        { action, cause: error, deliveryUnknown: isSendAction(action) }
       );
     }
 
@@ -37,7 +37,7 @@ export class OneBotClient {
         action,
         status: response.status,
         cause: error,
-        deliveryUnknown: action === "send_group_msg"
+        deliveryUnknown: isSendAction(action)
       });
     }
 
@@ -92,6 +92,34 @@ export class OneBotClient {
     return messages;
   }
 
+  async getFriendHistory(userId, {
+    messageSeq = 0,
+    count = 200,
+    reverseOrder = true,
+    signal
+  } = {}) {
+    const params = {
+      user_id: String(userId),
+      count,
+      reverse_order: reverseOrder
+    };
+    if (messageSeq != null && String(messageSeq).trim() && String(messageSeq) !== "0") {
+      params.message_seq = String(messageSeq);
+    }
+    let data;
+    try {
+      data = await this.call("get_friend_msg_history", params, { signal });
+    } catch (error) {
+      if (isEmptyHistoryResponse(error)) return [];
+      throw error;
+    }
+    return Array.isArray(data?.messages)
+      ? data.messages
+      : Array.isArray(data)
+        ? data
+        : [];
+  }
+
   async sendGroupMessage(groupId, message, options = {}) {
     const data = await this.call("send_group_msg", {
       group_id: String(groupId),
@@ -102,13 +130,28 @@ export class OneBotClient {
       raw: data
     };
   }
+
+  async sendPrivateMessage(userId, message, options = {}) {
+    const data = await this.call("send_private_msg", {
+      user_id: String(userId),
+      message: String(message || "")
+    }, options);
+    return {
+      messageId: String(data?.message_id ?? data?.messageId ?? ""),
+      raw: data
+    };
+  }
 }
 
 function isEmptyHistoryResponse(error) {
-  if (error?.code !== "ONEBOT_REJECTED" || error?.action !== "get_group_msg_history") return false;
+  if (error?.code !== "ONEBOT_REJECTED" || !["get_group_msg_history", "get_friend_msg_history"].includes(error?.action)) return false;
   const body = error.responseBody || {};
   const message = String(body.message || body.wording || error.message || "");
   return /消息.*不存在|message.*(?:does not exist|not found)/i.test(message);
+}
+
+function isSendAction(action) {
+  return ["send_group_msg", "send_private_msg"].includes(String(action || ""));
 }
 
 export class OneBotError extends Error {

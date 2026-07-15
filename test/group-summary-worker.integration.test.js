@@ -60,6 +60,42 @@ test("runs history -> SQLite -> provider -> OneBot once and suppresses a duplica
   }
 });
 
+test("reads a group window but delivers the summary to a private friend", async () => {
+  const nowMs = new Date(2026, 6, 14, 12, 0).getTime();
+  const fixture = createOneBotFixture(nowMs);
+  const server = await listen(fixture.handler);
+  const directory = await mkdtemp(join(tmpdir(), "group-summary-private-"));
+  const store = new GroupSummaryStore(join(directory, "summary.sqlite"));
+  const provider = { async generate({ messages }) { return summaryFor(messages); } };
+  try {
+    const config = makeConfig(server.url, {
+      sendEnabled: true,
+      delivery: { mode: "private", userId: "2909951742" }
+    });
+    const result = await runGroupSummaryPass({
+      groupId: "12345",
+      config,
+      store,
+      oneBot: new OneBotClient(config.oneBot),
+      provider,
+      force: true,
+      now: () => nowMs,
+      random: () => 0
+    });
+    assert.equal(result.status, "sent");
+    assert.equal(result.deliveryMode, "private");
+    assert.equal(result.deliveryTargetId, "2909951742");
+    assert.equal(fixture.sentMessages.length, 0);
+    assert.equal(fixture.privateMessages.length, 1);
+    assert.equal(fixture.privateMessages[0].userId, "2909951742");
+    assert.match(fixture.privateMessages[0].message, /群聊小结/);
+  } finally {
+    store.close();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("reconciles a send whose response was lost instead of sending it twice", async () => {
   const nowMs = new Date(2026, 6, 14, 12, 0).getTime();
   const fixture = createOneBotFixture(nowMs, { dropFirstSendResponse: true });
@@ -105,10 +141,57 @@ test("reconciles a send whose response was lost instead of sending it twice", as
   }
 });
 
-function makeConfig(baseUrl, { sendEnabled }) {
+test("reconciles a private summary whose response was lost", async () => {
+  const nowMs = new Date(2026, 6, 14, 12, 0).getTime();
+  const fixture = createOneBotFixture(nowMs, { dropFirstPrivateSendResponse: true });
+  const server = await listen(fixture.handler);
+  const directory = await mkdtemp(join(tmpdir(), "group-summary-private-unknown-"));
+  const store = new GroupSummaryStore(join(directory, "summary.sqlite"));
+  const provider = { async generate({ messages }) { return summaryFor(messages); } };
+  try {
+    const config = makeConfig(server.url, {
+      sendEnabled: true,
+      delivery: { mode: "private", userId: "2909951742" }
+    });
+    const oneBot = new OneBotClient(config.oneBot);
+    const first = await runGroupSummaryPass({
+      groupId: "12345",
+      config,
+      store,
+      oneBot,
+      provider,
+      force: true,
+      now: () => nowMs,
+      random: () => 0
+    });
+    assert.equal(first.status, "delivery_unknown");
+    assert.equal(fixture.privateMessages.length, 1);
+
+    const second = await runGroupSummaryPass({
+      groupId: "12345",
+      config,
+      store,
+      oneBot,
+      provider,
+      force: true,
+      now: () => nowMs + 60_000,
+      random: () => 0
+    });
+    assert.equal(second.status, "defer");
+    assert.equal(fixture.privateMessages.length, 1);
+    assert.equal(store.getRun(first.runId).status, "sent");
+  } finally {
+    store.close();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+function makeConfig(baseUrl, { sendEnabled, delivery = { mode: "group", userId: "" } }) {
   return {
     selfId: "",
     sendEnabled,
+    delivery,
     oneBot: {
       baseUrl,
       accessToken: "",
@@ -149,21 +232,31 @@ function summaryFor(messages) {
   };
 }
 
-function createOneBotFixture(nowMs, { dropFirstSendResponse = false } = {}) {
+function createOneBotFixture(nowMs, {
+  dropFirstSendResponse = false,
+  dropFirstPrivateSendResponse = false
+} = {}) {
   const sentMessages = [];
+  const privateMessages = [];
+  const privateHistory = [];
   const history = [
     rawMessage("1", 1, nowMs / 1_000 - 3_600, "1001", "A", "开始核对进度"),
     rawMessage("2", 2, nowMs / 1_000 - 3_000, "1002", "B", "测试还差一项")
   ];
   let dropped = false;
+  let droppedPrivate = false;
 
   return {
     sentMessages,
+    privateMessages,
     handler: async (req, res) => {
       const body = await readRequestJson(req);
       if (req.url === "/get_login_info") return json(res, { status: "ok", data: { user_id: 9999, nickname: "bot" } });
       if (req.url === "/get_group_msg_history") {
         return json(res, { status: "ok", data: { messages: history } });
+      }
+      if (req.url === "/get_friend_msg_history") {
+        return json(res, { status: "ok", data: { messages: privateHistory } });
       }
       if (req.url === "/send_group_msg") {
         sentMessages.push(body.message);
@@ -174,6 +267,23 @@ function createOneBotFixture(nowMs, { dropFirstSendResponse = false } = {}) {
           return;
         }
         return json(res, { status: "ok", data: { message_id: 9000 + sentMessages.length } });
+      }
+      if (req.url === "/send_private_msg") {
+        privateMessages.push({ userId: String(body.user_id), message: body.message });
+        privateHistory.push(rawMessage(
+          String(9500 + privateMessages.length),
+          200 + privateMessages.length,
+          nowMs / 1_000 + privateMessages.length,
+          "9999",
+          "bot",
+          body.message
+        ));
+        if (dropFirstPrivateSendResponse && !droppedPrivate) {
+          droppedPrivate = true;
+          req.socket.destroy();
+          return;
+        }
+        return json(res, { status: "ok", data: { message_id: 9500 + privateMessages.length } });
       }
       return json(res, { status: "failed", retcode: 404 }, 404);
     }

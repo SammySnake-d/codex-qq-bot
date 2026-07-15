@@ -63,4 +63,23 @@ test("classifies explicit rejection separately from an unknown send outcome", as
     disconnected.sendGroupMessage("1234", "hello"),
     (error) => error.code === "ONEBOT_NETWORK" && error.deliveryUnknown === true
   );
+  await assert.rejects(
+    disconnected.sendPrivateMessage("2909951742", "hello"),
+    (error) => error.code === "ONEBOT_NETWORK" && error.deliveryUnknown === true
+  );
+});
+
+test("sends a private summary to the configured friend", async () => {
+  let captured;
+  const client = new OneBotClient({
+    baseUrl: "http://127.0.0.1:3000",
+    fetchImpl: async (url, options) => {
+      captured = { url, body: JSON.parse(options.body) };
+      return new Response(JSON.stringify({ status: "ok", data: { message_id: 42 } }), { status: 200 });
+    }
+  });
+  const result = await client.sendPrivateMessage("2909951742", "summary");
+  assert.equal(captured.url, "http://127.0.0.1:3000/send_private_msg");
+  assert.deepEqual(captured.body, { user_id: "2909951742", message: "summary" });
+  assert.equal(result.messageId, "42");
 });

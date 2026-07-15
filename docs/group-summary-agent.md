@@ -1,16 +1,16 @@
 # Group Summary Agent
 
-Status: implemented on 2026-07-14. Unit and fake-OneBot integration tests pass.
-A local end-to-end run also passed with the real Codex CLI and a fake OneBot
-server. Live NapCat/QQ delivery remains pending because no local OneBot listener
-or target group configuration was available during implementation.
+Status: implemented on 2026-07-14. Live NapCat delivery was confirmed on
+2026-07-15 with a real source group, local Codex generation, private-friend
+delivery, persisted cursors, and QQ history verification.
 
 ## Outcome
 
 Run a normal QQ account through NapCat/OneBot and periodically summarize new
-group messages with a fresh Codex CLI or Claude Code process. The worker must
-persist its cursor, survive restarts, avoid duplicate delivery, and send only
-validated, deterministically rendered output.
+group messages with a fresh Codex CLI or Claude Code process. Source groups and
+the delivery destination are separate. The worker must persist its cursor,
+survive restarts, avoid duplicate delivery, and send only validated,
+deterministically rendered output.
 
 ## Acceptance Boundary
 
@@ -23,7 +23,8 @@ complete observable chain:
 4. Apply the due-time, activity, speaker-count, and quiet-period policy.
 5. Invoke a structured summary provider.
 6. Validate and render the provider result.
-7. Call `send_group_msg` once.
+7. Call the configured OneBot delivery action once: `send_private_msg` for a
+   private recipient, or `send_group_msg` for legacy group delivery.
 8. Persist the sent message id and advance the summary cursor.
 9. Re-running the worker does not resend the same window.
 
@@ -89,10 +90,13 @@ persistence.
 
 ## Configuration Contract
 
-The worker is disabled unless `QQ_SUMMARY_GROUP_IDS` is non-empty. Target ids,
-credentials, and send authorization come only from environment variables or CLI
+The worker is disabled unless `QQ_SUMMARY_GROUP_IDS` is non-empty. Source group
+ids are independent from the delivery destination. Private delivery requires
+both `QQ_SUMMARY_DELIVERY_MODE=private` and an explicit
+`QQ_SUMMARY_DELIVERY_USER_ID`; a missing private recipient fails closed.
+Credentials and send authorization come only from environment variables or CLI
 flags. Non-targeting schedule defaults are configurable and cannot cause a send
-until a group is selected and sending is explicitly enabled.
+until a source group is selected and sending is explicitly enabled.
 
 The cron process performs a short heartbeat. Randomness is persisted as
 `next_due_at`; the cron entry itself remains deterministic.

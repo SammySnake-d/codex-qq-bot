@@ -546,9 +546,15 @@ Merge the required values from `config/group-summary.env.example` into
 
 ```bash
 QQ_SUMMARY_GROUP_IDS=123456789
+QQ_SUMMARY_DELIVERY_MODE=private
+QQ_SUMMARY_DELIVERY_USER_ID=2909951742
 QQ_SUMMARY_PROVIDER=codex
 QQ_SUMMARY_SEND_ENABLED=0
 ```
+
+`QQ_SUMMARY_GROUP_IDS` selects the source groups to read. Delivery is separate:
+set `QQ_SUMMARY_DELIVERY_MODE=private` and `QQ_SUMMARY_DELIVERY_USER_ID` to send
+every summary to one QQ friend instead of posting it back to the source group.
 
 Generate one summary without sending it:
 

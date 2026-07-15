@@ -6,14 +6,26 @@ const DEFAULT_ACTIVE_HOURS = "08:00-23:30";
 export function loadGroupSummaryConfig({ env = process.env, projectDir = process.cwd() } = {}) {
   const groupIds = parseGroupIds(env.QQ_SUMMARY_GROUP_IDS || "");
   const provider = String(env.QQ_SUMMARY_PROVIDER || "codex").trim().toLowerCase();
+  const deliveryMode = String(env.QQ_SUMMARY_DELIVERY_MODE || "group").trim().toLowerCase();
+  const deliveryUserId = parseOptionalQqId(env.QQ_SUMMARY_DELIVERY_USER_ID);
   const homeDir = env.HOME || homedir();
   const codexSourceHome = resolve(env.CODEX_HOME || join(homeDir, ".codex"));
   if (!["codex", "claude"].includes(provider)) {
     throw new Error(`QQ_SUMMARY_PROVIDER must be codex or claude, received ${provider || "empty"}`);
   }
+  if (!["group", "private"].includes(deliveryMode)) {
+    throw new Error(`QQ_SUMMARY_DELIVERY_MODE must be group or private, received ${deliveryMode || "empty"}`);
+  }
+  if (deliveryMode === "private" && !deliveryUserId) {
+    throw new Error("QQ_SUMMARY_DELIVERY_USER_ID is required when QQ_SUMMARY_DELIVERY_MODE=private");
+  }
 
   return {
     groupIds,
+    delivery: {
+      mode: deliveryMode,
+      userId: deliveryUserId
+    },
     databasePath: resolve(projectDir, env.QQ_SUMMARY_DB_PATH || "data/group-summary.sqlite"),
     lockPath: resolve(projectDir, env.QQ_SUMMARY_LOCK_PATH || "runtime/group-summary.lock"),
     workspaceDir: resolve(projectDir, env.QQ_SUMMARY_WORKSPACE || "workspaces/group-summary"),

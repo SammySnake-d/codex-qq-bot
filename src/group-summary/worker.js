@@ -26,7 +26,7 @@ export async function runGroupSummaryPass({
   const unresolved = store.findUnresolvedDelivery(groupId);
   if (unresolved) {
     const match = unresolved.outputHash
-      ? store.findSelfMessageByContentHash(groupId, unresolved.outputHash, { afterMs: unresolved.createdAt })
+      ? await findDeliveredSummary({ groupId, config, store, oneBot, unresolved, selfId: login.userId })
       : null;
     if (match) {
       const nextDueAt = randomDueAt(startedAt, config.policy.dueMinMinutes, config.policy.dueMaxMinutes, random);
@@ -112,7 +112,9 @@ export async function runGroupSummaryPass({
 
   store.markSending(run.runId, now());
   try {
-    const sent = await oneBot.sendGroupMessage(groupId, renderedText);
+    const sent = config.delivery?.mode === "private"
+      ? await oneBot.sendPrivateMessage(config.delivery.userId, renderedText)
+      : await oneBot.sendGroupMessage(groupId, renderedText);
     const completedAt = now();
     const nextDueAt = randomDueAt(completedAt, config.policy.dueMinMinutes, config.policy.dueMaxMinutes, random);
     store.markSent(run.runId, { sentMessageId: sent.messageId, nextDueAt }, completedAt);
@@ -121,6 +123,8 @@ export async function runGroupSummaryPass({
       status: "sent",
       runId: run.runId,
       sentMessageId: sent.messageId,
+      deliveryMode: config.delivery?.mode || "group",
+      deliveryTargetId: config.delivery?.mode === "private" ? config.delivery.userId : groupId,
       messageCount: messages.length,
       nextDueAt,
       renderedText
@@ -130,6 +134,24 @@ export async function runGroupSummaryPass({
     store.markRunFailure(run.runId, status, error, now());
     return { groupId, status, runId: run.runId, error: error.message };
   }
+}
+
+async function findDeliveredSummary({ groupId, config, store, oneBot, unresolved, selfId }) {
+  if (config.delivery?.mode !== "private") {
+    return store.findSelfMessageByContentHash(groupId, unresolved.outputHash, { afterMs: unresolved.createdAt });
+  }
+  const rawMessages = await oneBot.getFriendHistory(config.delivery.userId, {
+    count: config.oneBot.historyBatchSize,
+    reverseOrder: true
+  });
+  const afterSeconds = Math.max(0, Math.floor(unresolved.createdAt / 1_000) - 60);
+  return rawMessages
+    .map((message) => normalizeOneBotHistoryMessage(message, {
+      groupId: `private:${config.delivery.userId}`,
+      selfId
+    }))
+    .filter(Boolean)
+    .find((message) => message.isSelf && message.contentHash === unresolved.outputHash && message.sentAt >= afterSeconds) || null;
 }
 
 export async function syncGroupHistory({ groupId, selfId, config, store, oneBot, nowMs = Date.now() }) {
