@@ -25,8 +25,9 @@ export async function main(argv = process.argv.slice(2), { env = process.env, pr
   }
 
   const releaseLock = await acquireProcessLock(config.lockPath);
-  const store = new GroupSummaryStore(config.databasePath);
+  let store;
   try {
+    store = new GroupSummaryStore(config.databasePath);
     const oneBot = new OneBotClient(config.oneBot);
     const provider = createSummaryProvider(config.provider, { workspaceDir: config.workspaceDir });
     const results = [];
@@ -44,7 +45,7 @@ export async function main(argv = process.argv.slice(2), { env = process.env, pr
     if (results.some((result) => !isSuccessfulResult(result))) process.exitCode = 1;
     return results;
   } finally {
-    store.close();
+    store?.close();
     await releaseLock();
   }
 }
